@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calculator, Shield, AlertTriangle, DollarSign, BarChart3, Loader, RefreshCw, Globe, ChevronDown } from 'lucide-react';
-import './App.css';
-import { useLanguage, languages } from './contexts/LanguageContext';
-import { useCurrency, currencies } from './contexts/CurrencyContext';
-import { useTranslation } from './translations';
-import { fetchStockData } from './services/stockDataService';
+import { useLanguage, languages } from '../src/contexts/LanguageContext';
+import { useCurrency, currencies } from '../src/contexts/CurrencyContext';
+import { useTranslation } from '../src/translations';
 
 const ProtectivePutCalculator = () => {
   const { currentLanguage, changeLanguage, isRTL } = useLanguage();
@@ -29,7 +27,7 @@ const ProtectivePutCalculator = () => {
   const [showCurrencyMenu, setShowCurrencyMenu] = useState(false);
   const [error, setError] = useState(null);
 
-  // Fetch live stock data using the service
+  // Fetch live stock data using Next.js API route
   const fetchLiveStockData = useCallback(async (symbol) => {
     if (!symbol || symbol.length < 1) return;
 
@@ -37,10 +35,22 @@ const ProtectivePutCalculator = () => {
     setError(null);
 
     try {
-      console.log(`🔄 Fetching live stock data for ${symbol}...`);
-      const data = await fetchStockData(symbol);
+      console.log(`🔄 Fetching live stock data for ${symbol} via Next.js API...`);
 
-      console.log(`✅ Successfully received live data:`, data);
+      // Call Next.js API route instead of external API
+      const response = await fetch(`/api/stock-data?symbol=${encodeURIComponent(symbol)}`);
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      console.log(`✅ Successfully received live data via Next.js API:`, data);
 
       setStockData(data);
       setInputs(prev => ({
@@ -54,7 +64,7 @@ const ProtectivePutCalculator = () => {
       console.log(`📊 Live data loaded for ${data.symbol}: $${data.price.toFixed(2)} (${data.provider})`);
 
     } catch (error) {
-      console.error('❌ Error fetching live stock data:', error);
+      console.error('❌ Error fetching live stock data via Next.js API:', error);
       setError(error.message);
 
       // Don't clear existing data on error, just show the error
@@ -155,7 +165,7 @@ const ProtectivePutCalculator = () => {
     // Greeks
     const delta = Nmd1 - 1;
     const theta = (-S * (1 / Math.sqrt(2 * Math.PI)) * Math.exp(-0.5 * d1 * d1) * sigma / (2 * Math.sqrt(T))
-                   - r * K * Math.exp(-r * T) * Nmd2) / 365;
+      - r * K * Math.exp(-r * T) * Nmd2) / 365;
     const vega = S * Math.sqrt(T) * (1 / Math.sqrt(2 * Math.PI)) * Math.exp(-0.5 * d1 * d1) / 100;
     const gamma = (1 / Math.sqrt(2 * Math.PI)) * Math.exp(-0.5 * d1 * d1) / (S * sigma * Math.sqrt(T));
 
@@ -200,30 +210,20 @@ const ProtectivePutCalculator = () => {
     }
     if (timeHorizon < 30) {
       warnings.push({
+        type: 'info',
+        message: t('shortTimeWarning')
+      });
+    }
+    if (impliedVolatility > 0.5) {
+      warnings.push({
         type: 'warning',
-        message: t('timeDecayWarning')
-      });
-    }
-    if (protectionLevel > 0.98) {
-      warnings.push({
-        type: 'info',
-        message: t('expensiveProtectionWarning')
-      });
-    }
-    if (Math.abs(delta) < 0.3) {
-      warnings.push({
-        type: 'info',
-        message: t('lowDeltaWarning')
+        message: t('highVolatilityWarning')
       });
     }
 
     return {
       putPrice,
-      delta,
-      theta: convertFromUSD(theta),
-      vega: convertFromUSD(vega),
-      gamma,
-      strikePrice: strikePriceConverted,
+      strikePriceConverted,
       portfolioValue,
       totalPremiumCost,
       costPercentage,
@@ -231,6 +231,7 @@ const ProtectivePutCalculator = () => {
       maxLoss,
       breakevenPrice,
       protectedValue,
+      greeks: { delta, theta, vega, gamma },
       scenarios,
       warnings
     };
@@ -242,10 +243,9 @@ const ProtectivePutCalculator = () => {
   };
 
   const handleInputChange = (field, value) => {
-    setInputs(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setInputs(prev => ({ ...prev, [field]: value }));
+    // Auto-calculate when inputs change
+    setTimeout(() => handleCalculate(), 100);
   };
 
   const handleRefresh = () => {
@@ -254,25 +254,31 @@ const ProtectivePutCalculator = () => {
     }
   };
 
+  // Auto-calculate on mount and when inputs change
+  useEffect(() => {
+    handleCalculate();
+  }, [inputs, currentCurrency]);
+
   return (
     <div className={`min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 text-gray-100 ${isRTL ? 'rtl' : 'ltr'}`}>
-      {/* Futuristic Header */}
+      {/* Enhanced Header */}
       <div className="relative bg-gradient-to-r from-indigo-900/30 via-purple-900/30 to-cyan-900/30 border-b border-gray-700/50 backdrop-blur-sm">
         <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-purple-600/10"></div>
         <div className="relative max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
+            {/* Logo and Title */}
             <div className="flex items-center gap-4">
               <div className="relative">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-cyan-400 rounded-xl blur opacity-75"></div>
                 <div className="relative bg-gradient-to-r from-blue-600 to-cyan-600 p-3 rounded-xl shadow-2xl">
-                <Shield className="w-8 h-8 text-white" />
+                  <Shield className="w-8 h-8 text-white" />
                 </div>
               </div>
-              <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                  {t('title')}
+              <div className="">
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                  {t('appTitle')}
                 </h1>
-                <p className="text-gray-400 mt-1">{t('subtitle')}</p>
+                <p className="text-gray-400 text-lg">{t('appSubtitle')}</p>
               </div>
             </div>
 
@@ -348,9 +354,16 @@ const ProtectivePutCalculator = () => {
               {lastFetched && (
                 <div className="text-right text-sm">
                   <div className="text-gray-400">{t('lastUpdated')}</div>
-                  <div className="text-gray-300 font-mono">{lastFetched.toLocaleTimeString()}</div>
-              </div>
-            )}
+                  <div className="text-gray-300 font-mono">
+                    {lastFetched.toLocaleTimeString('en', {
+                      hour12: false,
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit'
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -364,32 +377,32 @@ const ProtectivePutCalculator = () => {
             <div className="relative bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm rounded-2xl border border-gray-700/50 p-6 shadow-2xl">
               <div className="absolute inset-0 bg-gradient-to-br from-blue-600/5 to-purple-600/5 rounded-2xl"></div>
               <div className="relative">
-              <h2 className="text-xl font-semibold mb-6 flex items-center gap-2 text-white">
-                <Calculator className="w-5 h-5 text-blue-400" />
+                <h2 className="text-xl font-semibold mb-6 flex items-center gap-2 text-white">
+                  <Calculator className="w-5 h-5 text-blue-400" />
                   {t('strategyParameters')}
-              </h2>
+                </h2>
 
-              <div className="space-y-6">
-                {/* Stock Symbol */}
-                <div>
+                <div className="space-y-6">
+                  {/* Stock Symbol */}
+                  <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">{t('stockSymbol')}</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={inputs.stockSymbol}
-                      onChange={(e) => handleInputChange('stockSymbol', e.target.value.toUpperCase())}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={inputs.stockSymbol}
+                        onChange={(e) => handleInputChange('stockSymbol', e.target.value.toUpperCase())}
                         className="flex-1 bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm transition-all duration-200"
                         placeholder={t('stockSymbolPlaceholder')}
-                    />
-                    <button
-                      onClick={handleRefresh}
-                      disabled={loading}
+                      />
+                      <button
+                        onClick={handleRefresh}
+                        disabled={loading}
                         className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 disabled:opacity-50 text-white p-3 rounded-lg transition-all duration-200 shadow-lg"
-                    >
-                      {loading ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {stockData && (
+                      >
+                        {loading ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {stockData && (
                       <div className="mt-2 text-sm text-gray-400 flex items-center gap-4">
                         <span>
                           {t('current')}: <span className="text-green-400 font-semibold">
@@ -401,7 +414,7 @@ const ProtectivePutCalculator = () => {
                             {stockData.change >= 0 ? '+' : ''}{stockData.change.toFixed(2)}%
                           </span>
                         )}
-                      {stockData.marketCap && (
+                        {stockData.marketCap && (
                           <span>{t('cap')}: {formatCurrency(convertFromUSD(stockData.marketCap / 1e9), currentCurrency, 1)}B</span>
                         )}
                       </div>
@@ -419,7 +432,7 @@ const ProtectivePutCalculator = () => {
                           </div>
                           {stockData.provider && (
                             <span className="text-xs text-gray-400">
-                              via {stockData.provider}
+                              via {stockData.provider} (Next.js API)
                             </span>
                           )}
                         </div>
@@ -442,343 +455,315 @@ const ProtectivePutCalculator = () => {
                           {error}
                         </div>
                         <div className="text-xs text-gray-400 mt-2">
-                          💡 Using demo key. Add your own API key to environment variables for full access.
+                          💡 Check server-side API configuration or try again later.
                         </div>
                       </div>
                     )}
-                </div>
+                  </div>
 
-                {/* Current Stock Price */}
-                <div>
+                  {/* Current Stock Price */}
+                  <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       {t('currentStockPrice')} ({currencies[currentCurrency].symbol})
                     </label>
-                  <input
-                    type="number"
-                      value={convertFromUSD(inputs.currentStockPrice).toFixed(2)}
-                    onChange={(e) => handleInputChange('currentStockPrice', parseFloat(e.target.value) || 0)}
-                      className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm transition-all duration-200"
-                    step="0.01"
-                    disabled={loading}
-                  />
-                </div>
-
-                {/* Number of Shares */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">{t('numberOfShares')}</label>
-                  <input
-                    type="number"
-                    value={inputs.numberOfShares}
-                    onChange={(e) => handleInputChange('numberOfShares', parseInt(e.target.value) || 0)}
-                      className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm transition-all duration-200"
-                  />
-                </div>
-
-                {/* Protection Level */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                      {t('protectionLevel')}: {(inputs.protectionLevel * 100).toFixed(0)}%
-                  </label>
-                  <div className="relative">
                     <input
-                      type="range"
-                      min="0.80"
-                      max="0.99"
+                      type="number"
+                      value={convertFromUSD(inputs.currentStockPrice).toFixed(2)}
+                      onChange={(e) => handleInputChange('currentStockPrice', parseFloat(e.target.value) || 0)}
+                      className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm transition-all duration-200"
                       step="0.01"
-                      value={inputs.protectionLevel}
-                      onChange={(e) => handleInputChange('protectionLevel', parseFloat(e.target.value))}
-                        className="w-full h-2 bg-gray-700/50 rounded-lg appearance-none cursor-pointer range-slider"
+                      disabled={loading}
                     />
-                    <div className="flex justify-between text-xs text-gray-400 mt-1">
-                      <span>80%</span>
-                      <span>99%</span>
+                  </div>
+
+                  {/* Number of Shares */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">{t('numberOfShares')}</label>
+                    <input
+                      type="number"
+                      value={inputs.numberOfShares}
+                      onChange={(e) => handleInputChange('numberOfShares', parseInt(e.target.value) || 0)}
+                      className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm transition-all duration-200"
+                    />
+                  </div>
+
+                  {/* Protection Level */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      {t('protectionLevel')}: {(inputs.protectionLevel * 100).toFixed(0)}%
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="range"
+                        min="0.80"
+                        max="0.99"
+                        step="0.01"
+                        value={inputs.protectionLevel}
+                        onChange={(e) => handleInputChange('protectionLevel', parseFloat(e.target.value))}
+                        className="w-full h-2 bg-gray-700/50 rounded-lg appearance-none cursor-pointer range-slider"
+                      />
+                      <div className="flex justify-between text-xs text-gray-400 mt-1">
+                        <span>80%</span>
+                        <span>99%</span>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-400 mt-1">
+                      {t('strike')}: {formatCurrency(convertFromUSD(inputs.currentStockPrice * inputs.protectionLevel))}
                     </div>
                   </div>
-                  <div className="text-sm text-gray-400 mt-1">
-                      {t('strike')}: {formatCurrency(convertFromUSD(inputs.currentStockPrice * inputs.protectionLevel))}
-                  </div>
-                </div>
 
-                {/* Time Horizon */}
-                <div>
+                  {/* Time Horizon */}
+                  <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">{t('timeHorizon')}</label>
-                  <select
-                    value={inputs.timeHorizon}
-                    onChange={(e) => handleInputChange('timeHorizon', parseInt(e.target.value))}
+                    <select
+                      value={inputs.timeHorizon}
+                      onChange={(e) => handleInputChange('timeHorizon', parseInt(e.target.value))}
                       className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm transition-all duration-200"
-                  >
+                    >
                       <option value={30}>{t('days30')}</option>
                       <option value={60}>{t('days60')}</option>
                       <option value={90}>{t('days90')}</option>
                       <option value={180}>{t('days180')}</option>
                       <option value={365}>{t('days365')}</option>
-                  </select>
-                </div>
+                    </select>
+                  </div>
 
-                {/* Risk-Free Rate */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {/* Risk-Free Rate */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       {t('riskFreeRate')}: {(inputs.riskFreeRate * 100).toFixed(1)}%
-                  </label>
-                  <input
-                    type="number"
-                    value={inputs.riskFreeRate}
-                    onChange={(e) => handleInputChange('riskFreeRate', parseFloat(e.target.value) || 0)}
+                    </label>
+                    <input
+                      type="number"
+                      value={inputs.riskFreeRate}
+                      onChange={(e) => handleInputChange('riskFreeRate', parseFloat(e.target.value) || 0)}
                       className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm transition-all duration-200"
-                    step="0.001"
-                    min="0"
-                    max="0.1"
-                  />
-                </div>
+                      step="0.001"
+                      min="0"
+                      max="0.1"
+                    />
+                  </div>
 
-                {/* Implied Volatility */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {/* Implied Volatility */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
                       {t('impliedVolatility')}: {(inputs.impliedVolatility * 100).toFixed(0)}%
-                  </label>
-                  <input
-                    type="number"
-                    value={inputs.impliedVolatility}
-                    onChange={(e) => handleInputChange('impliedVolatility', parseFloat(e.target.value) || 0)}
+                    </label>
+                    <input
+                      type="number"
+                      value={inputs.impliedVolatility}
+                      onChange={(e) => handleInputChange('impliedVolatility', parseFloat(e.target.value) || 0)}
                       className="w-full bg-gray-700/50 border border-gray-600/50 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 backdrop-blur-sm transition-all duration-200"
-                    step="0.01"
-                    min="0.05"
-                    max="1.0"
-                  />
-                  {stockData?.estimatedVolatility && (
-                    <div className="text-sm text-gray-400 mt-1">
+                      step="0.01"
+                      min="0.05"
+                      max="1.0"
+                    />
+                    {stockData?.estimatedVolatility && (
+                      <div className="text-sm text-gray-400 mt-1">
                         {t('estimatedFromData')}: {(stockData.estimatedVolatility * 100).toFixed(0)}%
-                    </div>
-                  )}
-                </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Enhanced Calculate Button */}
-                <button
-                  onClick={handleCalculate}
-                  disabled={!inputs.currentStockPrice || inputs.currentStockPrice <= 0}
-                    className="w-full bg-gradient-to-r from-blue-600 via-purple-600 to-cyan-600 hover:from-blue-700 hover:via-purple-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-2xl transform hover:scale-[1.02]"
-                >
-                  <Calculator className="w-5 h-5" />
-                    {t('calculate')}
-                </button>
+                  <button
+                    onClick={handleCalculate}
+                    className="w-full bg-gradient-to-r from-blue-600 via-purple-600 to-cyan-600 hover:from-blue-700 hover:via-purple-700 hover:to-cyan-700 text-white font-semibold py-4 px-6 rounded-xl transition-all duration-300 shadow-2xl hover:shadow-cyan-500/25 transform hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    <span className="flex items-center justify-center gap-3">
+                      <BarChart3 className="w-5 h-5" />
+                      {t('calculateStrategy')}
+                    </span>
+                  </button>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Enhanced Results Panel */}
+          {/* Results Panel */}
           <div className="lg:col-span-2">
             {calculationResults ? (
               <div className="space-y-6">
-                {/* Warnings */}
-                {calculationResults.warnings.length > 0 && (
-                  <div className="space-y-2">
-                    {calculationResults.warnings.map((warning, index) => (
-                      <div key={index} className={`p-4 rounded-xl border flex items-center gap-3 backdrop-blur-sm ${warning.type === 'warning'
-                        ? 'bg-yellow-900/20 border-yellow-600/50 text-yellow-400'
-                        : 'bg-blue-900/20 border-blue-600/50 text-blue-400'
-                      }`}>
-                        <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                        <span>{warning.message}</span>
+                {/* Strategy Overview */}
+                <div className="relative bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm rounded-2xl border border-gray-700/50 p-6 shadow-2xl">
+                  <div className="absolute inset-0 bg-gradient-to-br from-green-600/5 to-blue-600/5 rounded-2xl"></div>
+                  <div className="relative">
+                    <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-white">
+                      <Shield className="w-5 h-5 text-green-400" />
+                      {t('strategyOverview')}
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600/30">
+                        <div className="text-sm text-gray-400">{t('putPremium')}</div>
+                        <div className="text-2xl font-bold text-green-400">
+                          {formatCurrency(calculationResults.putPrice)}
+                        </div>
+                        <div className="text-xs text-gray-500">{t('perContract')}</div>
                       </div>
-                    ))}
+
+                      <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600/30">
+                        <div className="text-sm text-gray-400">{t('totalCost')}</div>
+                        <div className="text-2xl font-bold text-blue-400">
+                          {formatCurrency(calculationResults.totalPremiumCost)}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {calculationResults.costPercentage.toFixed(2)}% {t('ofPortfolio')}
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600/30">
+                        <div className="text-sm text-gray-400">{t('annualizedCost')}</div>
+                        <div className="text-2xl font-bold text-purple-400">
+                          {calculationResults.annualizedCost.toFixed(2)}%
+                        </div>
+                        <div className="text-xs text-gray-500">{t('perYear')}</div>
+                      </div>
+
+                      <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600/30">
+                        <div className="text-sm text-gray-400">{t('maxLoss')}</div>
+                        <div className="text-2xl font-bold text-red-400">
+                          {formatCurrency(Math.max(0, calculationResults.maxLoss))}
+                        </div>
+                        <div className="text-xs text-gray-500">{t('worstCase')}</div>
+                      </div>
+
+                      <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600/30">
+                        <div className="text-sm text-gray-400">{t('breakeven')}</div>
+                        <div className="text-2xl font-bold text-yellow-400">
+                          {formatCurrency(calculationResults.breakevenPrice)}
+                        </div>
+                        <div className="text-xs text-gray-500">{t('stockPrice')}</div>
+                      </div>
+
+                      <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600/30">
+                        <div className="text-sm text-gray-400">{t('protectedValue')}</div>
+                        <div className="text-2xl font-bold text-cyan-400">
+                          {formatCurrency(calculationResults.protectedValue)}
+                        </div>
+                        <div className="text-xs text-gray-500">{t('minimum')}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Warnings */}
+                {calculationResults.warnings && calculationResults.warnings.length > 0 && (
+                  <div className="relative bg-gradient-to-br from-yellow-900/20 to-orange-900/20 backdrop-blur-sm rounded-2xl border border-yellow-600/30 p-6">
+                    <h4 className="text-lg font-semibold mb-3 flex items-center gap-2 text-yellow-400">
+                      <AlertTriangle className="w-5 h-5" />
+                      {t('warnings')}
+                    </h4>
+                    <div className="space-y-2">
+                      {calculationResults.warnings.map((warning, index) => (
+                        <div key={index} className="flex items-start gap-2 text-yellow-200">
+                          <div className="w-2 h-2 bg-yellow-400 rounded-full mt-2 flex-shrink-0"></div>
+                          <span className="text-sm">{warning.message}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
-                {/* Enhanced Key Metrics Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="relative bg-gradient-to-br from-green-900/30 to-emerald-900/30 backdrop-blur-sm p-6 rounded-xl border border-green-700/50 shadow-xl">
-                    <div className="absolute inset-0 bg-gradient-to-br from-green-600/10 to-emerald-600/10 rounded-xl"></div>
-                    <div className="relative">
-                      <div className="text-sm text-green-300 font-medium">{t('strikePrice')}</div>
-                      <div className="text-2xl font-bold text-white">{formatCurrency(calculationResults.strikePrice)}</div>
-                    </div>
-                  </div>
-
-                  <div className="relative bg-gradient-to-br from-blue-900/30 to-cyan-900/30 backdrop-blur-sm p-6 rounded-xl border border-blue-700/50 shadow-xl">
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-600/10 to-cyan-600/10 rounded-xl"></div>
-                    <div className="relative">
-                      <div className="text-sm text-blue-300 font-medium">{t('putPremium')}</div>
-                      <div className="text-2xl font-bold text-white">{formatCurrency(calculationResults.putPrice)}</div>
-                    </div>
-                  </div>
-
-                  <div className="relative bg-gradient-to-br from-purple-900/30 to-indigo-900/30 backdrop-blur-sm p-6 rounded-xl border border-purple-700/50 shadow-xl">
-                    <div className="absolute inset-0 bg-gradient-to-br from-purple-600/10 to-indigo-600/10 rounded-xl"></div>
-                    <div className="relative">
-                      <div className="text-sm text-purple-300 font-medium">{t('totalCost')}</div>
-                      <div className="text-2xl font-bold text-white">{formatCurrency(calculationResults.totalPremiumCost, currentCurrency, 0)}</div>
-                    </div>
-                  </div>
-
-                  <div className="relative bg-gradient-to-br from-orange-900/30 to-red-900/30 backdrop-blur-sm p-6 rounded-xl border border-orange-700/50 shadow-xl">
-                    <div className="absolute inset-0 bg-gradient-to-br from-orange-600/10 to-red-600/10 rounded-xl"></div>
-                    <div className="relative">
-                      <div className="text-sm text-orange-300 font-medium">{t('protectionCost')}</div>
-                    <div className="text-2xl font-bold text-white">{calculationResults.costPercentage.toFixed(2)}%</div>
-                    </div>
-                  </div>
-
-                  <div className="relative bg-gradient-to-br from-red-900/30 to-pink-900/30 backdrop-blur-sm p-6 rounded-xl border border-red-700/50 shadow-xl">
-                    <div className="absolute inset-0 bg-gradient-to-br from-red-600/10 to-pink-600/10 rounded-xl"></div>
-                    <div className="relative">
-                      <div className="text-sm text-red-300 font-medium">{t('annualizedCost')}</div>
-                    <div className="text-2xl font-bold text-white">{calculationResults.annualizedCost.toFixed(2)}%</div>
-                    </div>
-                  </div>
-
-                  <div className="relative bg-gradient-to-br from-indigo-900/30 to-purple-900/30 backdrop-blur-sm p-6 rounded-xl border border-indigo-700/50 shadow-xl">
-                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/10 to-purple-600/10 rounded-xl"></div>
-                    <div className="relative">
-                      <div className="text-sm text-indigo-300 font-medium">{t('breakeven')}</div>
-                      <div className="text-2xl font-bold text-white">{formatCurrency(calculationResults.breakevenPrice)}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Enhanced Protection Analysis */}
-                <div className="relative bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6 shadow-xl">
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-600/5 to-purple-600/5 rounded-xl"></div>
+                {/* Greeks */}
+                <div className="relative bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm rounded-2xl border border-gray-700/50 p-6 shadow-2xl">
+                  <div className="absolute inset-0 bg-gradient-to-br from-purple-600/5 to-pink-600/5 rounded-2xl"></div>
                   <div className="relative">
-                  <h3 className="font-semibold mb-4 flex items-center gap-2 text-white">
-                    <Shield className="w-5 h-5 text-blue-400" />
-                      {t('protectionAnalysis')}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                        <div className="text-sm text-gray-400 mb-1">{t('portfolioValue')}</div>
-                        <div className="text-xl font-semibold text-white">{formatCurrency(calculationResults.portfolioValue, currentCurrency, 0)}</div>
-                    </div>
-                    <div>
-                        <div className="text-sm text-gray-400 mb-1">{t('maximumLoss')}</div>
-                        <div className="text-xl font-semibold text-red-400">{formatCurrency(calculationResults.maxLoss, currentCurrency, 0)}</div>
-                    </div>
-                    <div>
-                        <div className="text-sm text-gray-400 mb-1">{t('protectedValue')}</div>
-                        <div className="text-xl font-semibold text-green-400">{formatCurrency(calculationResults.protectedValue, currentCurrency, 0)}</div>
+                    <h4 className="text-lg font-semibold mb-4 flex items-center gap-2 text-white">
+                      <BarChart3 className="w-5 h-5 text-purple-400" />
+                      {t('optionGreeks')}
+                    </h4>
+
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="bg-gray-700/30 rounded-lg p-3 border border-gray-600/30">
+                        <div className="text-sm text-gray-400">Delta</div>
+                        <div className="text-lg font-semibold text-purple-400">
+                          {calculationResults.greeks.delta.toFixed(3)}
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-700/30 rounded-lg p-3 border border-gray-600/30">
+                        <div className="text-sm text-gray-400">Gamma</div>
+                        <div className="text-lg font-semibold text-pink-400">
+                          {calculationResults.greeks.gamma.toFixed(4)}
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-700/30 rounded-lg p-3 border border-gray-600/30">
+                        <div className="text-sm text-gray-400">Theta</div>
+                        <div className="text-lg font-semibold text-red-400">
+                          {calculationResults.greeks.theta.toFixed(3)}
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-700/30 rounded-lg p-3 border border-gray-600/30">
+                        <div className="text-sm text-gray-400">Vega</div>
+                        <div className="text-lg font-semibold text-cyan-400">
+                          {calculationResults.greeks.vega.toFixed(3)}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Enhanced Greeks */}
-                <div className="relative bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6 shadow-xl">
-                  <div className="absolute inset-0 bg-gradient-to-br from-green-600/5 to-cyan-600/5 rounded-xl"></div>
+                {/* Scenario Analysis */}
+                <div className="relative bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm rounded-2xl border border-gray-700/50 p-6 shadow-2xl">
+                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-600/5 to-blue-600/5 rounded-2xl"></div>
                   <div className="relative">
-                    <h3 className="font-semibold mb-4 text-white">{t('optionGreeks')}</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                    <div>
-                        <div className="text-sm text-gray-400 mb-1">{t('delta')}</div>
-                      <div className="text-lg font-semibold text-white">{calculationResults.delta.toFixed(3)}</div>
-                    </div>
-                    <div>
-                        <div className="text-sm text-gray-400 mb-1">{t('theta')}</div>
-                        <div className="text-lg font-semibold text-white">{formatCurrency(calculationResults.theta, currentCurrency, 3)}</div>
-                    </div>
-                    <div>
-                        <div className="text-sm text-gray-400 mb-1">{t('vega')}</div>
-                        <div className="text-lg font-semibold text-white">{formatCurrency(calculationResults.vega, currentCurrency, 3)}</div>
-                    </div>
-                    <div>
-                        <div className="text-sm text-gray-400 mb-1">{t('gamma')}</div>
-                      <div className="text-lg font-semibold text-white">{calculationResults.gamma.toFixed(4)}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Enhanced Scenario Analysis */}
-                <div className="relative bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6 shadow-xl">
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-600/5 to-pink-600/5 rounded-xl"></div>
-                  <div className="relative">
-                  <h3 className="font-semibold mb-4 flex items-center gap-2 text-white">
-                    <BarChart3 className="w-5 h-5 text-blue-400" />
+                    <h4 className="text-lg font-semibold mb-4 flex items-center gap-2 text-white">
+                      <BarChart3 className="w-5 h-5 text-cyan-400" />
                       {t('scenarioAnalysis')}
-                  </h3>
+                    </h4>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                          <tr className="border-b border-gray-700/50">
-                            <th className="text-left p-3 font-semibold text-gray-300">{t('stockPrice')}</th>
-                            <th className="text-right p-3 font-semibold text-gray-300">{t('stockValue')}</th>
-                            <th className="text-right p-3 font-semibold text-gray-300">{t('putValue')}</th>
-                            <th className="text-right p-3 font-semibold text-gray-300">{t('totalValue')}</th>
-                            <th className="text-right p-3 font-semibold text-gray-300">{t('pnl')}</th>
-                            <th className="text-right p-3 font-semibold text-gray-300">{t('pnlPercent')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {calculationResults.scenarios.map((scenario, index) => (
-                          <tr key={index} className={`border-b border-gray-700/30 hover:bg-gray-700/20 transition-colors ${Math.abs(scenario.stockPrice - convertFromUSD(inputs.currentStockPrice)) < 0.01 ? 'bg-blue-900/20' : ''
-                          }`}>
-                            <td className="p-3 text-white">{formatCurrency(scenario.stockPrice)}</td>
-                            <td className="p-3 text-right text-gray-300">{formatCurrency(scenario.stockValue, currentCurrency, 0)}</td>
-                            <td className="p-3 text-right text-gray-300">{formatCurrency(scenario.putValue, currentCurrency, 0)}</td>
-                            <td className="p-3 text-right text-white font-medium">{formatCurrency(scenario.totalValue, currentCurrency, 0)}</td>
-                            <td className={`p-3 text-right font-medium ${scenario.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              {formatCurrency(scenario.pnl, currentCurrency, 0)}
-                            </td>
-                            <td className={`p-3 text-right font-medium ${scenario.pnlPercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              {scenario.pnlPercent.toFixed(1)}%
-                            </td>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-600/30">
+                            <th className="text-left py-2 text-gray-400">{t('stockPrice')}</th>
+                            <th className="text-right py-2 text-gray-400">{t('stockValue')}</th>
+                            <th className="text-right py-2 text-gray-400">{t('putValue')}</th>
+                            <th className="text-right py-2 text-gray-400">{t('totalValue')}</th>
+                            <th className="text-right py-2 text-gray-400">{t('pnl')}</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Enhanced Recommendations */}
-                <div className="relative bg-gradient-to-br from-indigo-900/20 to-purple-900/20 backdrop-blur-sm border border-indigo-700/50 rounded-xl p-6 shadow-xl">
-                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/10 to-purple-600/10 rounded-xl"></div>
-                  <div className="relative">
-                  <h3 className="font-semibold mb-3 flex items-center gap-2 text-white">
-                    <DollarSign className="w-5 h-5 text-indigo-400" />
-                      {t('strategyRecommendations')}
-                  </h3>
-                  <div className="space-y-2 text-sm text-gray-300">
-                    {calculationResults.annualizedCost <= 5 && (
-                        <p className="text-green-400">{t('costEffectiveProtection')}</p>
-                    )}
-                    {Math.abs(calculationResults.delta) >= 0.3 && (
-                        <p className="text-green-400">{t('adequateProtection')}</p>
-                    )}
-                    {inputs.timeHorizon >= 90 && (
-                        <p className="text-green-400">{t('reasonableTimeHorizon')}</p>
-                    )}
-                      <p>{t('monitorTimeDecay')}</p>
-                      <p>{t('considerRolling')}</p>
-                      <p>{t('evaluateCostBenefit')}</p>
+                        </thead>
+                        <tbody>
+                          {calculationResults.scenarios.map((scenario, index) => (
+                            <tr key={index} className="border-b border-gray-700/20 hover:bg-gray-700/10">
+                              <td className="py-2 text-gray-300">
+                                {formatCurrency(scenario.stockPrice)}
+                              </td>
+                              <td className="text-right py-2 text-gray-300">
+                                {formatCurrency(scenario.stockValue)}
+                              </td>
+                              <td className="text-right py-2 text-green-400">
+                                {formatCurrency(scenario.putValue)}
+                              </td>
+                              <td className="text-right py-2 text-blue-400">
+                                {formatCurrency(scenario.totalValue)}
+                              </td>
+                              <td className={`text-right py-2 ${scenario.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {scenario.pnl >= 0 ? '+' : ''}{formatCurrency(scenario.pnl)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
-                <div className="relative bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-12 text-center shadow-xl">
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-600/5 to-purple-600/5 rounded-xl"></div>
-                  <div className="relative">
-                <Calculator className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-gray-400 mb-2">{t('readyToCalculate')}</h3>
-                    <p className="text-gray-500">{t('enterParameters')}</p>
-                  </div>
+              <div className="flex items-center justify-center h-64 bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm rounded-2xl border border-gray-700/50">
+                <div className="text-center">
+                  <Calculator className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-gray-400 mb-2">{t('readyToCalculate')}</h3>
+                  <p className="text-gray-500">{t('enterParameters')}</p>
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
-
-      {/* Click outside handlers */}
-      {(showLanguageMenu || showCurrencyMenu) && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => {
-            setShowLanguageMenu(false);
-            setShowCurrencyMenu(false);
-          }}
-        />
-      )}
     </div>
   );
 };

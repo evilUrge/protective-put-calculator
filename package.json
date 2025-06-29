@@ -1,6 +1,6 @@
 {
   "name": "protective-put-calculator",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Professional protective put strategy calculator for portfolio insurance and risk management",
   "keywords": ["finance", "options", "protective-put", "black-scholes", "portfolio-insurance", "risk-management"],
   "author": "evilUrge",
@@ -12,20 +12,24 @@
   },
   "private": true,
   "dependencies": {
-    "@testing-library/jest-dom": "^5.16.4",
-    "@testing-library/react": "^13.3.0",
-    "@testing-library/user-event": "^13.5.0",
-    "lucide-react": "^0.263.1",
+    "next": "^14.0.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
+    "lucide-react": "^0.294.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.55.0",
+    "eslint-config-next": "^14.0.4",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "export": "next export"
   },
   "eslintConfig": {
     "extends": [
